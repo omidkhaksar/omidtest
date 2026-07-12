@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -22,10 +22,12 @@ from app.schemas import (
     listing_to_out,
 )
 from app.services import (
+    apply_meta_to_listing,
     create_listing,
     find_listing,
     get_listing_by_url,
     list_listings as query_listings,
+    normalize_listing_url,
     update_listing_status,
 )
 from app.telegram_webhook import get_application, process_webhook_update, start_telegram_webhook, stop_telegram_webhook
@@ -71,7 +73,7 @@ def meta():
     return BoardMeta()
 
 
-@app.get("/api/listings/lookup", response_model=ListingOut)
+@app.get("/api/lookup", response_model=ListingOut)
 def lookup_listing(q: str, db: Session = Depends(get_db)):
     listing = find_listing(db, q)
     if not listing:
@@ -125,23 +127,35 @@ async def preview_listing(url: str):
     )
 
 
-@app.post("/api/listings", response_model=ListingOut, status_code=201)
-async def add_listing(payload: ListingCreate, db: Session = Depends(get_db)):
-    existing = get_listing_by_url(db, payload.url)
-    if existing:
-        raise HTTPException(status_code=409, detail="Listing already saved")
-
-    meta = await fetch_listing_meta(payload.url)
+@app.post("/api/listings", response_model=ListingOut)
+async def add_listing(
+    payload: ListingCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    url = normalize_listing_url(payload.url)
+    existing = get_listing_by_url(db, url)
+    meta = await fetch_listing_meta(url)
     title = payload.title or meta.title or "Untitled listing"
-    image_url = meta.image_url
-    price = meta.price
+
+    if existing:
+        apply_meta_to_listing(
+            existing,
+            meta,
+            notes=payload.notes or None,
+            source_chat_id=payload.source_chat_id,
+        )
+        db.commit()
+        db.refresh(existing)
+        response.status_code = 200
+        return listing_to_out(existing)
 
     listing = create_listing(
         db,
-        url=payload.url,
+        url=url,
         title=title,
-        image_url=image_url,
-        price=price,
+        image_url=meta.image_url,
+        price=meta.price,
         location=meta.location,
         description=meta.description,
         specs=meta.specs,
@@ -150,6 +164,7 @@ async def add_listing(payload: ListingCreate, db: Session = Depends(get_db)):
         notes=payload.notes,
         source_chat_id=payload.source_chat_id,
     )
+    response.status_code = 201
     return listing_to_out(listing)
 
 

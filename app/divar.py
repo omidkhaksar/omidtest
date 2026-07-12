@@ -279,6 +279,15 @@ async def fetch_listing_meta(url: str) -> ListingMeta:
     return ListingMeta(title=url.rstrip("/").split("/")[-1] or "Untitled listing")
 
 
+def normalize_listing_url(url: str) -> str:
+    url = url.strip().rstrip("/")
+    if is_divar_url(url) and "/v/" in url:
+        token = extract_divar_token(url)
+        if token:
+            return f"https://divar.ir/v/{token}"
+    return url
+
+
 def dumps_json(data) -> str:
     return json.dumps(data, ensure_ascii=False)
 

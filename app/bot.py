@@ -90,15 +90,19 @@ async def api_request(method: str, path: str, **kwargs) -> httpx.Response:
 
 
 async def api_post_listing(url: str, chat_id: str) -> dict:
-    response = await api_request("POST", "/api/listings", json={"url": url, "source_chat_id": chat_id})
-    if response.status_code == 409:
-        return {"duplicate": True, **response.json()}
+    response = await api_request(
+        "POST",
+        "/api/listings",
+        json={"url": url, "source_chat_id": chat_id},
+    )
     response.raise_for_status()
-    return response.json()
+    data = response.json()
+    data["_updated"] = response.status_code == 200
+    return data
 
 
 async def api_lookup(query: str) -> dict:
-    response = await api_request("GET", "/api/listings/lookup", params={"q": query})
+    response = await api_request("GET", "/api/lookup", params={"q": query})
     response.raise_for_status()
     return response.json()
 
@@ -800,16 +804,8 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(f"ذخیره نشد: {exc}")
         return
 
-    if data.get("duplicate"):
-        await update.message.reply_text("قبلاً در برد بود — نمایش آگهی موجود:")
-        try:
-            existing = await api_lookup(url)
-            await send_listing_card(update, existing, header="قبلاً ذخیره شده")
-        except Exception:
-            pass
-        return
-
-    await send_listing_card(update, data)
+    header = "بروزرسانی شد (در برد بود)" if data.pop("_updated", False) else "ذخیره شد در برد"
+    await send_listing_card(update, data, header=header)
 
 
 async def _edit_listing_message(query, caption: str, keyboard=None, parse_mode: Optional[str] = None) -> None:

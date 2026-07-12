@@ -6,9 +6,18 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.database import Listing, ListingStatus
-from app.divar import dumps_json, extract_url, is_divar_url
+from app.divar import dumps_json, extract_url, is_divar_url, loads_json, normalize_listing_url
+from app.divar import ListingMeta
 
-__all__ = ["extract_url", "is_divar_url", "create_listing", "get_listing_by_url", "update_listing_status"]
+__all__ = [
+    "extract_url",
+    "is_divar_url",
+    "normalize_listing_url",
+    "create_listing",
+    "get_listing_by_url",
+    "update_listing_status",
+    "apply_meta_to_listing",
+]
 
 
 def create_listing(
@@ -27,7 +36,7 @@ def create_listing(
     source_chat_id: Optional[str] = None,
 ) -> Listing:
     listing = Listing(
-        url=url,
+        url=normalize_listing_url(url),
         title=title,
         image_url=image_url,
         price=price,
@@ -47,7 +56,43 @@ def create_listing(
 
 
 def get_listing_by_url(db: Session, url: str) -> Optional[Listing]:
-    return db.query(Listing).filter(Listing.url == url).first()
+    normalized = normalize_listing_url(url)
+    listing = db.query(Listing).filter(Listing.url == normalized).first()
+    if listing:
+        return listing
+    token = normalized.rstrip("/").split("/")[-1]
+    if token:
+        return (
+            db.query(Listing)
+            .filter(Listing.url.contains(token))
+            .order_by(Listing.updated_at.desc())
+            .first()
+        )
+    return None
+
+
+def apply_meta_to_listing(
+    listing: Listing,
+    meta: ListingMeta,
+    *,
+    notes: Optional[str] = None,
+    source_chat_id: Optional[str] = None,
+) -> Listing:
+    listing.url = normalize_listing_url(listing.url)
+    listing.title = meta.title or listing.title
+    listing.image_url = meta.image_url or listing.image_url
+    listing.price = meta.price or listing.price
+    listing.location = meta.location or listing.location
+    listing.description = meta.description or listing.description
+    listing.specs_json = dumps_json(meta.specs or loads_json(listing.specs_json, {}))
+    listing.images_json = dumps_json(meta.images or loads_json(listing.images_json, []))
+    listing.tags_json = dumps_json(meta.tags or loads_json(listing.tags_json, []))
+    if notes:
+        listing.notes = notes
+    if source_chat_id:
+        listing.source_chat_id = source_chat_id
+    listing.updated_at = datetime.utcnow()
+    return listing
 
 
 def find_listing(db: Session, query: str) -> Optional[Listing]:
@@ -59,20 +104,7 @@ def find_listing(db: Session, query: str) -> Optional[Listing]:
 
     url = extract_url(query)
     if url:
-        listing = get_listing_by_url(db, url)
-        if listing:
-            return listing
-
-    token = query.rstrip("/").split("/")[-1]
-    if token:
-        listing = (
-            db.query(Listing)
-            .filter(Listing.url.contains(token))
-            .order_by(Listing.updated_at.desc())
-            .first()
-        )
-        if listing:
-            return listing
+        return get_listing_by_url(db, url)
 
     return (
         db.query(Listing)

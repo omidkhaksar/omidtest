@@ -23,6 +23,15 @@ async def start_telegram_webhook() -> None:
     if not settings.telegram_bot_token or not settings.use_webhook:
         return
 
+    dashboard = settings.dashboard_url.rstrip("/")
+    if "YOUR-PROJECT" in dashboard or dashboard.startswith("http://localhost"):
+        logger.error(
+            "DASHBOARD_URL must be your real Vercel URL for webhook mode (got %s). "
+            "Use TELEGRAM_MODE=polling for local dev.",
+            dashboard,
+        )
+        return
+
     _application = Application.builder().token(settings.telegram_bot_token).build()
     register_handlers(_application)
     await _application.initialize()

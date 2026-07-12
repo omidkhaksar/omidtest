@@ -60,41 +60,58 @@ git push -u origin main
 
 ## Step 4 — Environment variables
 
-In **Project → Settings → Environment Variables**, add:
+In **Project → Settings → Environment Variables**, add every variable below.
+Apply to **Production**, **Preview**, and **Development**.
 
-| Variable | Value | Required |
-|----------|-------|----------|
-| `DATABASE_URL` | Copy from Neon (`POSTGRES_URL`) | ✅ |
-| `DASHBOARD_URL` | `https://YOUR-PROJECT.vercel.app` | ✅ |
-| `TELEGRAM_BOT_TOKEN` | From @BotFather | ✅ |
-| `TELEGRAM_WEBHOOK_SECRET` | Random string (e.g. `openssl rand -hex 32`) | ✅ recommended |
-| `TELEGRAM_ALLOWED_USER_IDS` | Your Telegram user id | optional |
-| `RUN_MODE` | `api` | auto-set |
-| `TELEGRAM_MODE` | `webhook` | auto-set |
+### Variables
 
-**Example:**
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | Neon connection string (from Vercel Storage → Neon → `POSTGRES_URL`) |
+| `DASHBOARD_URL` | `https://YOUR-PROJECT.vercel.app` |
+| `TELEGRAM_BOT_TOKEN` | Token from [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_WEBHOOK_SECRET` | Run `openssl rand -hex 32` and paste the result |
+| `TELEGRAM_ALLOWED_USER_IDS` | Your Telegram user id (optional) |
+| `RUN_MODE` | `api` |
+| `TELEGRAM_MODE` | `webhook` |
+
+### Copy-paste template
+
+Replace the placeholders, then paste each line in Vercel:
 
 ```env
-DATABASE_URL=postgresql://user:pass@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require
-DASHBOARD_URL=https://house-hunt.vercel.app
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGHI...
-TELEGRAM_WEBHOOK_SECRET=a1b2c3d4e5f6...
-TELEGRAM_ALLOWED_USER_IDS=12345678
+DATABASE_URL=postgresql://USER:PASSWORD@ep-XXXX.us-east-1.aws.neon.tech/neondb?sslmode=require
+DASHBOARD_URL=https://YOUR-PROJECT.vercel.app
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_WEBHOOK_SECRET=paste_output_of_openssl_rand_hex_32_here
+TELEGRAM_ALLOWED_USER_IDS=
+RUN_MODE=api
+TELEGRAM_MODE=webhook
 ```
 
-Apply to **Production**, **Preview**, and **Development**.
+Generate webhook secret:
+
+```bash
+openssl rand -hex 32
+```
+
+See also: `vercel.env.example` in the project root.
 
 ---
 
 ## Step 5 — Deploy
 
+After env vars are saved, deploy with one of these:
+
 ### Option A — Git push (recommended)
 
 ```bash
+git add .
+git commit -m "Deploy to Vercel"
 git push origin main
 ```
 
-Vercel deploys automatically on every push to `main`.
+Vercel builds and deploys automatically on every push to `main`.
 
 ### Option B — Vercel CLI
 
@@ -105,11 +122,33 @@ vercel link
 vercel deploy --prod
 ```
 
-Or use the helper script:
+### Option C — Deploy script
 
 ```bash
 chmod +x scripts/deploy-vercel.sh
 ./scripts/deploy-vercel.sh
+```
+
+### After deploy
+
+1. Open `https://YOUR-PROJECT.vercel.app` — dashboard should load
+2. Open `https://YOUR-PROJECT.vercel.app/api/health` — should return:
+
+```json
+{
+  "ok": true,
+  "telegram_webhook": true,
+  "database": "postgres"
+}
+```
+
+3. Send `/start` to your Telegram bot, then paste a Divar link
+4. Refresh the dashboard — the listing should appear in **جدید**
+
+If you change `DASHBOARD_URL` or `TELEGRAM_BOT_TOKEN`, redeploy:
+
+```bash
+vercel deploy --prod
 ```
 
 ---

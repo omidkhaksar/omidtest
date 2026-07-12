@@ -9,7 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 from app.config import settings
-from app.database import ListingStatus, STATUS_LABELS, init_db
+from app.database import ListingStatus, STATUS_LABELS
 from app.services import extract_url, is_divar_url
 
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +84,22 @@ async def api_lookup(query: str) -> dict:
     response = await api_request("GET", "/api/listings/lookup", params={"q": query})
     response.raise_for_status()
     return response.json()
+
+
+def _api_error_message(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code == 404:
+            return "این آگهی در برد نیست. لینک را دوباره بفرستید یا /list بزنید."
+        if exc.response.status_code == 409:
+            return "این آگهی قبلاً ذخیره شده."
+        try:
+            detail = exc.response.json().get("detail")
+            if detail:
+                return str(detail)
+        except Exception:
+            pass
+        return f"خطای سرور ({exc.response.status_code})"
+    return str(exc)
 
 
 async def api_move(listing_id: int, status: ListingStatus) -> dict:
@@ -341,7 +357,7 @@ def _make_action_handler(action: str):
             await update.message.reply_text(str(exc))
         except Exception as exc:
             logger.exception("Command failed")
-            await update.message.reply_text(f"Error: {exc}")
+            await update.message.reply_text(_api_error_message(exc))
 
     return handler
 
@@ -359,7 +375,7 @@ async def note_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except ValueError as exc:
         await update.message.reply_text(str(exc))
     except Exception as exc:
-        await update.message.reply_text(f"Error: {exc}")
+        await update.message.reply_text(_api_error_message(exc))
 
 
 # ── Messages ────────────────────────────────────────────────
@@ -391,7 +407,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             except ValueError as exc:
                 await update.message.reply_text(str(exc))
             except Exception as exc:
-                await update.message.reply_text(f"Error: {exc}")
+                await update.message.reply_text(_api_error_message(exc))
             return
 
     # Text action: "reject https://..."
@@ -411,7 +427,7 @@ async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         except ValueError as exc:
             await update.message.reply_text(str(exc))
         except Exception as exc:
-            await update.message.reply_text(f"Error: {exc}")
+            await update.message.reply_text(_api_error_message(exc))
         return
 
     # Plain link → save
@@ -473,7 +489,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
             await query.answer(f"→ {label}")
         except Exception as exc:
-            await query.answer(f"Error: {exc}", show_alert=True)
+            await query.answer(_api_error_message(exc), show_alert=True)
         return
 
     if query.data.startswith("delete:"):
@@ -498,7 +514,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 await _edit_listing_message(query, f"آگهی #{listing_id} حذف شد", keyboard=None)
                 await query.answer("حذف شد")
             except Exception as exc:
-                await query.answer(f"Error: {exc}", show_alert=True)
+                await query.answer(_api_error_message(exc), show_alert=True)
             return
 
         if step == "no":
@@ -530,10 +546,9 @@ def build_app() -> Application:
 
 
 def main() -> None:
-    init_db()
     app = build_app()
     logger.info("Telegram bot polling...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 if __name__ == "__main__":

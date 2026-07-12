@@ -1,0 +1,17 @@
+.venv
+.env
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.db
+house_hunt.db
+data/
+.vercel
+.cursor
+agent-transcripts
+README.md
+docker-compose.yml
+Dockerfile
+Dockerfile.vercel

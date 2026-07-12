@@ -1,0 +1,16 @@
+.venv
+.env
+.env.*
+!.env.example
+__pycache__
+*.pyc
+*.db
+house_hunt.db
+data/
+.git
+.cursor
+agent-transcripts
+*.md
+!DEPLOY_VERCEL.md
+docker-compose.yml
+Dockerfile
